@@ -2,6 +2,7 @@ import os
 import torch
 import random
 import numpy as np
+import pandas as pd
 from text import text_to_sequence
 from hparams import hparams as hps
 from torch.utils.data import Dataset
@@ -17,11 +18,54 @@ def files_to_list(fdir):
 			wav_path = os.path.join(fdir, 'wavs', '%s.wav' % parts[0])
 			f_list.append([wav_path, parts[1]])
 	return f_list
-
+def load_filepaths_and_text(fdir,wavpath):
+	filename=pd.read_csv(fdir)
+      
+	fpaths_and_text=[]
+      
+	for i in range(filename.shape[0]):
+		file_name=filename.loc[i]["id"]
+        
+		file_name=file_name.replace(" ","")
+        
+		
+		file_path=wavpath+"/"+file_name+".wav"
+        
+		text=filename.loc[i]["text"]
+        
+		fpaths_and_text.append([file_path,text])
+      
+	return fpaths_and_text
 
 class ljdataset(Dataset):
 	def __init__(self, fdir):
 		self.f_list = files_to_list(fdir)
+		random.shuffle(self.f_list)
+
+	def get_mel_text_pair(self, filename_and_text):
+		filename, text = filename_and_text[0], filename_and_text[1]
+		text = self.get_text(text)
+		mel = self.get_mel(filename)
+		return (text, mel)
+
+	def get_mel(self, filename):
+		wav = load_wav(filename)
+		mel = melspectrogram(wav).astype(np.float32)
+		return torch.Tensor(mel)
+
+	def get_text(self, text):
+		text_norm = torch.IntTensor(text_to_sequence(text, hps.text_cleaners))
+		return text_norm
+
+	def __getitem__(self, index):
+		return self.get_mel_text_pair(self.f_list[index])
+
+	def __len__(self):
+		return len(self.f_list)
+
+class Hindi_Mono(Dataset):
+	def __init__(self, fdir,wavpath):
+		self.f_list = load_filepaths_and_text(fdir,wavpath)
 		random.shuffle(self.f_list)
 
 	def get_mel_text_pair(self, filename_and_text):
@@ -83,3 +127,5 @@ class ljcollate():
 			output_lengths[i] = mel.size(1)
 
 		return text_padded, input_lengths, mel_padded, gate_padded, output_lengths
+obj=Hindi_Mono("/home/manthan/process9_tts/processed_data.csv","/home/manthan/process9_tts/hindi_mono_male/wav")
+print(obj.__getitem__(3))

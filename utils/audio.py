@@ -1,9 +1,77 @@
 import scipy
-import librosa
-import librosa.filters
+# import librosa
+# import librosa.filters
+from utils.libs import hz_to_mel,mel_to_hz,normalize,stft,istft
 import numpy as np
 from scipy.io import wavfile
 from hparams import hparams as hps
+import scipy.signal
+def fft_frequencies(sr=22050, n_fft=2048):
+    
+    return np.linspace(0, float(sr) / 2, int(1 + n_fft // 2), endpoint=True)
+def mel_frequencies(n_mels=128, fmin=0.0, fmax=11025.0, htk=False):
+    
+
+    # 'Center freqs' of mel bands - uniformly spaced between limits
+    min_mel = hz_to_mel(fmin, htk=htk)
+    max_mel = hz_to_mel(fmax, htk=htk)
+
+    mels = np.linspace(min_mel, max_mel, n_mels)
+
+    return mel_to_hz(mels, htk=htk)
+def mel(sr,n_fft,n_mels=128,fmin=0.0,fmax=None,htk=False,norm="slaney",dtype=np.float32,):
+	if fmax is None:
+		fmax =float(sr)
+		fmax=fmax/2
+
+    # Initialize the weights
+    
+	n_mels = int(n_mels)
+    
+	weights = np.zeros((n_mels, int(1 + n_fft // 2)), dtype=dtype)
+
+    # Center freqs of each FFT bin
+    
+	fftfreqs = fft_frequencies(sr=sr, n_fft=n_fft)
+
+    # 'Center freqs' of mel bands - uniformly spaced between limits
+    
+	mel_f = mel_frequencies(n_mels + 2, fmin=fmin, fmax=fmax, htk=htk)
+
+    
+	fdiff = np.diff(mel_f)
+    
+	ramps = np.subtract.outer(mel_f, fftfreqs)
+
+    
+	for i in range(n_mels):
+        # lower and upper slopes for all bins
+        
+		lower = -ramps[i] / fdiff[i]
+        
+		upper = ramps[i + 2] / fdiff[i + 1]
+
+        # .. then intersect them with each other and zero
+        
+		weights[i] = np.maximum(0, np.minimum(lower, upper))
+
+    
+	if norm == "slaney":
+        # Slaney-style mel is scaled to be approx constant energy per channel
+        
+		enorm = 2.0 / (mel_f[2 : n_mels + 2] - mel_f[:n_mels])
+        
+		weights *= enorm[:, np.newaxis]
+    
+	else:
+        
+		weights = normalize(weights, norm=norm, axis=-1)
+
+    # Only check weights if f_mel[0] is positive
+    
+	if not np.all((mel_f[:-2] == 0) | (weights.max(axis=1) > 0)):
+		print ("warning")
+	return weights
 
 
 def load_wav(path):
@@ -78,12 +146,12 @@ def _griffin_lim(S):
 
 def _stft(y):
 	n_fft, hop_length, win_length = _stft_parameters()
-	return librosa.stft(y=y, n_fft=n_fft, hop_length=hop_length, win_length=win_length)
+	return stft(y=y, n_fft=n_fft, hop_length=hop_length, win_length=win_length)
 
 
 def _istft(y):
 	_, hop_length, win_length = _stft_parameters()
-	return librosa.istft(y, hop_length=hop_length, win_length=win_length)
+	return istft(y, hop_length=hop_length, win_length=win_length)
 
 
 def _stft_parameters():
@@ -116,7 +184,7 @@ def _mel_to_linear(spectrogram):
 
 def _build_mel_basis():
 	n_fft = (hps.num_freq - 1) * 2
-	return librosa.filters.mel(hps.sample_rate, n_fft, n_mels=hps.num_mels)
+	return mel(hps.sample_rate, n_fft, n_mels=hps.num_mels)
 
 def _amp_to_db(x):
 	return 20 * np.log10(np.maximum(1e-5, x))

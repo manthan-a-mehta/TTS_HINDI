@@ -8,14 +8,14 @@ from utils.util import mode
 from hparams import hparams as hps
 from torch.utils.data import DataLoader
 from utils.logger import Tacotron2Logger
-from utils.dataset import ljdataset, ljcollate
+from utils.dataset import ljdataset, ljcollate,Hindi_Mono
 from model.model import Tacotron2, Tacotron2Loss
 np.random.seed(0)
 torch.manual_seed(0)
 torch.cuda.manual_seed(0)
 
 def prepare_dataloaders(fdir):
-	trainset = ljdataset(fdir)
+	trainset = Hindi_Mono("/home/manthan/process9_tts/processed_data.csv",fdir)
 	collate_fn = ljcollate(hps.n_frames_per_step)
 	train_loader = DataLoader(trainset, num_workers = hps.n_workers, shuffle = True,
 							  batch_size = hps.batch_size, pin_memory = hps.pin_mem,
